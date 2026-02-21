@@ -1,69 +1,114 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>2D Random Walk</title>
+    <title>P2P Online 2D Game</title>
+    <script src="https://unpkg.com"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: sans-serif; color: white; }
         canvas { display: block; }
-        #ui { position: absolute; top: 20px; left: 20px; color: white; pointer-events: none; }
+        #ui { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px; pointer-events: auto; }
+        input { padding: 5px; width: 150px; border-radius: 4px; border: none; }
+        button { padding: 5px 10px; cursor: pointer; background: #4CAF50; color: white; border: none; border-radius: 4px; }
     </style>
 </head>
 <body>
     <div id="ui">
-        <h2 id="nickname">Присваиваем имя...</h2>
-        <p>Стрелки или WASD, чтобы ходить</p>
+        <div id="my-id-display">Твой ID: <span id="my-peer-id">...генерируется...</span></div>
+        <hr>
+        <input type="text" id="remote-id" placeholder="ID друга">
+        <button onclick="connectToPeer()">Подключиться</button>
+        <p style="font-size: 12px;">Стрелки/WASD — ходить</p>
     </div>
     <canvas id="game"></canvas>
 
 <script>
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
-    const nickDisplay = document.getElementById('nickname');
+    
+    // 1. Генерация ника
+    const adjectives = ["Шустрый", "Дикий", "Лунный", "Скрытный"];
+    const nouns = ["Лис", "Кот", "Робот", "Странник"];
+    const myNick = adjectives[Math.floor(Math.random()*adjectives.length)] + " " + nouns[Math.floor(Math.random()*nouns.length)];
 
-    // 1. Генератор рандомных ников
-    const adjectives = ["Быстрый", "Грустный", "Эпичный", "Ловкий", "Сонный"];
-    const nouns = ["Енот", "Ниндзя", "Кактус", "Пиксель", "Маг"];
-    const randomNick = adjectives[Math.floor(Math.random() * adjectives.length)] + 
-                     " " + nouns[Math.floor(Math.random() * nouns.length)];
-    nickDisplay.innerText = "Ты: " + randomNick;
+    // 2. Сетевая часть (PeerJS)
+    const peer = new Peer(); // Используем бесплатный сигнальный сервер PeerJS
+    let conn;
+    let players = {}; // Все игроки в комнате
 
-    // 2. Параметры игрока
-    const player = {
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
-        size: 30,
-        speed: 5,
+    // Мой игрок
+    const me = {
+        id: null,
+        nick: myNick,
+        x: Math.random() * 500,
+        y: Math.random() * 500,
         color: `hsl(${Math.random() * 360}, 70%, 60%)`
     };
 
+    peer.on('open', (id) => {
+        me.id = id;
+        document.getElementById('my-peer-id').innerText = id;
+        players[id] = me;
+    });
+
+    // Когда к нам кто-то подключается
+    peer.on('connection', (connection) => {
+        setupConnection(connection);
+    });
+
+    function connectToPeer() {
+        const remoteId = document.getElementById('remote-id').value;
+        const connection = peer.connect(remoteId);
+        setupConnection(connection);
+    }
+
+    function setupConnection(connection) {
+        conn = connection;
+        conn.on('open', () => {
+            console.log("Подключено к:", conn.peer);
+            // Отправляем свои данные сразу после подключения
+            setInterval(() => {
+                conn.send({ type: 'update', data: me });
+            }, 50); // 20 обновлений в секунду
+        });
+
+        conn.on('data', (data) => {
+            if (data.type === 'update') {
+                players[data.data.id] = data.data;
+            }
+        });
+    }
+
+    // 3. Логика игры и рендер
     const keys = {};
     window.addEventListener('keydown', e => keys[e.code] = true);
     window.addEventListener('keyup', e => keys[e.code] = false);
 
     function update() {
-        if (keys['ArrowUp'] || keys['KeyW']) player.y -= player.speed;
-        if (keys['ArrowDown'] || keys['KeyS']) player.y += player.speed;
-        if (keys['ArrowLeft'] || keys['KeyA']) player.x -= player.speed;
-        if (keys['ArrowRight'] || keys['KeyD']) player.x += player.speed;
+        if (keys['ArrowUp'] || keys['KeyW']) me.y -= 4;
+        if (keys['ArrowDown'] || keys['KeyS']) me.y += 4;
+        if (keys['ArrowLeft'] || keys['KeyA']) me.x -= 4;
+        if (keys['ArrowRight'] || keys['KeyD']) me.x += 4;
     }
 
     function draw() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // Рисуем персонажа
-        ctx.fillStyle = player.color;
-        ctx.fillRect(player.x, player.y, player.size, player.size);
-        
-        // Рисуем ник над головой
-        ctx.fillStyle = "white";
-        ctx.font = "14px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText(randomNick, player.x + player.size/2, player.y - 10);
 
         update();
+
+        // Рисуем всех игроков
+        for (let id in players) {
+            const p = players[id];
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x, p.y, 30, 30);
+            
+            ctx.fillStyle = "white";
+            ctx.font = "12px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(p.nick + (id === me.id ? " (Ты)" : ""), p.x + 15, p.y - 10);
+        }
+
         requestAnimationFrame(draw);
     }
 
