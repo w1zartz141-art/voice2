@@ -1,81 +1,73 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Наш Свой Звонок</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>2D Random Walk</title>
     <style>
-        body { background: #121212; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .video-container { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-        video { width: 300px; height: 225px; background: #000; border-radius: 12px; border: 2px solid #333; object-fit: cover; }
-        .status { margin-bottom: 20px; color: #aaa; }
-        button { padding: 15px 30px; border-radius: 50px; background: #00c853; color: white; border: none; font-size: 18px; cursor: pointer; }
+        body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; }
+        canvas { display: block; }
+        #ui { position: absolute; top: 20px; left: 20px; color: white; pointer-events: none; }
     </style>
 </head>
 <body>
-
-    <div id="status" class="status">Загрузка связи...</div>
-    
-    <div class="video-container">
-        <video id="localVideo" autoplay muted playsinline></video>
-        <video id="remoteVideo" autoplay playsinline></video>
+    <div id="ui">
+        <h2 id="nickname">Присваиваем имя...</h2>
+        <p>Стрелки или WASD, чтобы ходить</p>
     </div>
+    <canvas id="game"></canvas>
 
-    <br>
-    <button id="callBtn" style="display:none;" onclick="startConnect()">Подключиться к другу</button>
+<script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const nickDisplay = document.getElementById('nickname');
 
-    <script src="https://unpkg.com"></script>
-    
-    <script>
-        const status = document.getElementById('status');
-        const localVideo = document.getElementById('localVideo');
-        const remoteVideo = document.getElementById('remoteVideo');
-        const callBtn = document.getElementById('callBtn');
+    // 1. Генератор рандомных ников
+    const adjectives = ["Быстрый", "Грустный", "Эпичный", "Ловкий", "Сонный"];
+    const nouns = ["Енот", "Ниндзя", "Кактус", "Пиксель", "Маг"];
+    const randomNick = adjectives[Math.floor(Math.random() * adjectives.length)] + 
+                     " " + nouns[Math.floor(Math.random() * nouns.length)];
+    nickDisplay.innerText = "Ты: " + randomNick;
 
-        // ПРИДУМАЙТЕ С ДРУГОМ ОДНО СЛОВО И НАПИШИТЕ ТУТ (например, 'nasha-komnata-2024')
-        const ROOM_NAME = 'retret'; 
+    // 2. Параметры игрока
+    const player = {
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+        size: 30,
+        speed: 5,
+        color: `hsl(${Math.random() * 360}, 70%, 60%)`
+    };
+
+    const keys = {};
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+
+    function update() {
+        if (keys['ArrowUp'] || keys['KeyW']) player.y -= player.speed;
+        if (keys['ArrowDown'] || keys['KeyS']) player.y += player.speed;
+        if (keys['ArrowLeft'] || keys['KeyA']) player.x -= player.speed;
+        if (keys['ArrowRight'] || keys['KeyD']) player.x += player.speed;
+    }
+
+    function draw() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
         
-        let myStream;
-        // Твой ID будет 'имя_комнаты-user1', у друга 'имя_комнаты-user2'
-        // Для простоты: кто первый зашел, тот и ждет.
-        const peer = new Peer(); 
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Рисуем персонажа
+        ctx.fillStyle = player.color;
+        ctx.fillRect(player.x, player.y, player.size, player.size);
+        
+        // Рисуем ник над головой
+        ctx.fillStyle = "white";
+        ctx.font = "14px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(randomNick, player.x + player.size/2, player.y - 10);
 
-        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-            .then(stream => {
-                myStream = stream;
-                localVideo.srcObject = stream;
-                status.innerText = "Камера готова. Нажми кнопку для связи.";
-                callBtn.style.display = "block";
-            })
-            .catch(err => {
-                status.innerText = "Ошибка доступа к камере: " + err;
-            });
+        update();
+        requestAnimationFrame(draw);
+    }
 
-        // Слушаем входящие звонки
-        peer.on('call', call => {
-            call.answer(myStream);
-            call.on('stream', remoteStream => {
-                remoteVideo.srcObject = remoteStream;
-                status.innerText = "В сети!";
-            });
-        });
-
-        function startConnect() {
-            // Чтобы не мучиться с ID, просто введи ID друга вручную или договоритесь, 
-            // что один всегда звонит другому по конкретному имени.
-            const friendId = prompt("Введи ID друга (он появится у него на экране после загрузки):");
-            if (friendId) {
-                const call = peer.call(friendId, myStream);
-                call.on('stream', remoteStream => {
-                    remoteVideo.srcObject = remoteStream;
-                    status.innerText = "Связь установлена!";
-                });
-            }
-        }
-
-        peer.on('open', id => {
-            status.innerText = "Твой личный ID: " + id + " (передай его другу)";
-        });
-    </script>
+    draw();
+</script>
 </body>
 </html>
