@@ -1,75 +1,82 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Global Pixel Room</title>
-    <script src="https://www.gstatic.com"></script>
-    <script src="https://www.gstatic.com"></script>
+    <title>Pixel Party Online</title>
+    <!-- Подключаем Gun.js для синхронизации без паролей -->
+    <script src="https://cdn.jsdelivr.net"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #111; font-family: 'Courier New', monospace; }
+        body { margin: 0; overflow: hidden; background: #111; font-family: 'Segoe UI', sans-serif; }
         canvas { display: block; }
-        #info { position: absolute; top: 10px; left: 10px; color: #0f0; pointer-events: none; text-shadow: 1px 1px #000; }
+        #ui { position: absolute; top: 15px; left: 15px; color: #00ff00; pointer-events: none; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; }
     </style>
 </head>
 <body>
-    <div id="info">Загрузка...</div>
+    <div id="ui">
+        <div id="status">Подключение...</div>
+        <div id="my-nick"></div>
+    </div>
     <canvas id="game"></canvas>
 
 <script>
-    // --- КОНФИГУРАЦИЯ FIREBASE (Вставь свои данные сюда) ---
-    const firebaseConfig = {
-        apiKey: "ТВОЙ_API_KEY",
-        databaseURL: "https://ТВОЙ_ПРОЕКТ.firebaseio.com",
-        projectId: "ТВОЙ_PROJECT_ID",
-    };
-    // -------------------------------------------------------
-
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-    const playersRef = db.ref("players");
-
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
+    
+    // 1. Инициализация Gun (используем публичные серверы для стыковки)
+    const gun = Gun(['https://gun-manhattan.herokuapp.com']);
+    const room = gun.get('pixel_room_v1');
 
-    // Генерация ника и цвета
-    const nicks = ["Аноним", "Пиксель", "Юзер", "Бот", "Кибер"];
+    // 2. Генерация твоего персонажа
+    const adjs = ["Быстрый", "Синий", "Крутой", "Злой", "Милый"];
+    const names = ["Пиксель", "Куб", "Друг", "Гость"];
     const myId = Math.random().toString(36).substring(7);
-    const myData = {
+    const myNick = adjs[Math.floor(Math.random()*adjs.length)] + " " + names[Math.floor(Math.random()*names.length)];
+    
+    let me = {
         id: myId,
-        nick: nicks[Math.floor(Math.random()*nicks.length)] + "_" + Math.floor(Math.random()*99),
-        x: Math.random() * 500 + 50,
-        y: Math.random() * 500 + 50,
-        color: `hsl(${Math.random() * 360}, 80%, 50%)`
+        nick: myNick,
+        x: Math.random() * (window.innerWidth - 50),
+        y: Math.random() * (window.innerHeight - 50),
+        color: `hsl(${Math.random() * 360}, 80%, 60%)`,
+        lastSeen: Date.now()
     };
 
-    let allPlayers = {};
-    const myPlayerRef = db.ref(`players/${myId}`);
+    document.getElementById('my-nick').innerText = "Ты: " + myNick;
 
-    // Плавное управление
-    const keys = { w: false, a: false, s: false, d: false };
-    window.onkeydown = (e) => { keys[e.key.toLowerCase()] = true; };
-    window.onkeyup = (e) => { keys[e.key.toLowerCase()] = false; };
+    // 3. Управление
+    const keys = {};
+    window.onkeydown = (e) => keys[e.code] = true;
+    window.onkeyup = (e) => keys[e.code] = false;
 
-    // Подключение и удаление при выходе
-    myPlayerRef.set(myData);
-    myPlayerRef.onDisconnect().remove();
+    // 4. Мир игры
+    let players = {};
 
-    // Слушаем обновления всех игроков
-    playersRef.on("value", (snapshot) => {
-        allPlayers = snapshot.val() || {};
-        document.getElementById('info').innerText = `В сети: ${Object.keys(allPlayers).length} | Ты: ${myData.nick}`;
+    // Слушаем изменения в комнате
+    room.map().on((data, id) => {
+        if (!data) return;
+        // Удаляем тех, кто не двигался больше 10 секунд (простейший оффлайн)
+        if (Date.now() - data.lastSeen < 10000) {
+            players[id] = data;
+        } else {
+            delete players[id];
+        }
     });
 
-    function move() {
+    function update() {
         let moved = false;
-        const speed = 4;
-        if (keys.w || keys.arrowup) { myData.y -= speed; moved = true; }
-        if (keys.s || keys.arrowdown) { myData.y += speed; moved = true; }
-        if (keys.a || keys.arrowleft) { myData.x -= speed; moved = true; }
-        if (keys.d || keys.arrowright) { myData.x += speed; moved = true; }
+        const speed = 5;
+        
+        if (keys['KeyW'] || keys['ArrowUp']) { me.y -= speed; moved = true; }
+        if (keys['KeyS'] || keys['ArrowDown']) { me.y += speed; moved = true; }
+        if (keys['KeyA'] || keys['ArrowLeft']) { me.x -= speed; moved = true; }
+        if (keys['KeyD'] || keys['ArrowRight']) { me.x += speed; moved = true; }
 
         if (moved) {
-            myPlayerRef.update({ x: myData.x, y: myData.y });
+            me.lastSeen = Date.now();
+            room.get(myId).put(me); // Отправляем свои координаты в сеть
         }
+        
+        // Постоянно подтверждаем, что мы в сети
+        if (Date.now() % 1000 < 20) room.get(myId).put({lastSeen: Date.now()});
     }
 
     function draw() {
@@ -77,23 +84,30 @@
         canvas.height = window.innerHeight;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        move();
+        update();
 
-        Object.values(allPlayers).forEach(p => {
-            // Рисуем тело (пиксель)
+        // Рисуем всех игроков
+        Object.values(players).forEach(p => {
+            // Тело
             ctx.fillStyle = p.color;
-            ctx.fillRect(p.x, p.y, 20, 20);
-            
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = p.color;
+            ctx.fillRect(p.x, p.y, 25, 25);
+            ctx.shadowBlur = 0;
+
             // Ник
             ctx.fillStyle = "white";
-            ctx.font = "12px monospace";
+            ctx.font = "bold 14px Arial";
             ctx.textAlign = "center";
-            ctx.fillText(p.nick, p.x + 10, p.y - 8);
+            ctx.fillText(p.nick, p.x + 12.5, p.y - 10);
         });
 
+        document.getElementById('status').innerText = "В сети: " + Object.keys(players).length;
         requestAnimationFrame(draw);
     }
 
+    // На старт!
+    room.get(myId).put(me);
     draw();
 </script>
 </body>
