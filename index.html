@@ -1,70 +1,81 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <title>Моя Связь</title>
+    <meta charset="UTF-8">
+    <title>Наш Свой Звонок</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { background: #1a1a1a; color: white; font-family: sans-serif; text-align: center; }
-        video { width: 45%; background: #000; border-radius: 10px; margin: 5px; transform: scaleX(-1); }
-        .controls { margin-top: 20px; }
-        input { padding: 10px; border-radius: 5px; border: none; }
-        button { padding: 10px 20px; border-radius: 5px; background: #28a745; color: white; border: none; cursor: pointer; }
+        body { background: #121212; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .video-container { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+        video { width: 300px; height: 225px; background: #000; border-radius: 12px; border: 2px solid #333; object-fit: cover; }
+        .status { margin-bottom: 20px; color: #aaa; }
+        button { padding: 15px 30px; border-radius: 50px; background: #00c853; color: white; border: none; font-size: 18px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <h2>Твой ID: <span id="my-id">...</span></h2>
+    <div id="status" class="status">Загрузка связи...</div>
     
-    <div>
-        <video id="localVideo" autoplay muted></video>
-        <video id="remoteVideo" autoplay></video>
+    <div class="video-container">
+        <video id="localVideo" autoplay muted playsinline></video>
+        <video id="remoteVideo" autoplay playsinline></video>
     </div>
 
-    <div class="controls">
-        <input type="text" id="peer-id" placeholder="ID друга">
-        <button onclick="makeCall()">Позвонить</button>
-    </div>
+    <br>
+    <button id="callBtn" style="display:none;" onclick="startConnect()">Подключиться к другу</button>
 
-    <!-- Подключаем библиотеку PeerJS -->
     <script src="https://unpkg.com"></script>
     
     <script>
-        const myIdDisplay = document.getElementById('my-id');
+        const status = document.getElementById('status');
         const localVideo = document.getElementById('localVideo');
         const remoteVideo = document.getElementById('remoteVideo');
+        const callBtn = document.getElementById('callBtn');
+
+        // ПРИДУМАЙТЕ С ДРУГОМ ОДНО СЛОВО И НАПИШИТЕ ТУТ (например, 'nasha-komnata-2024')
+        const ROOM_NAME = 'retret'; 
         
-        // Создаем твой уникальный ID
+        let myStream;
+        // Твой ID будет 'имя_комнаты-user1', у друга 'имя_комнаты-user2'
+        // Для простоты: кто первый зашел, тот и ждет.
         const peer = new Peer(); 
 
-        let localStream;
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+            .then(stream => {
+                myStream = stream;
+                localVideo.srcObject = stream;
+                status.innerText = "Камера готова. Нажми кнопку для связи.";
+                callBtn.style.display = "block";
+            })
+            .catch(err => {
+                status.innerText = "Ошибка доступа к камере: " + err;
+            });
 
-        // 1. Получаем доступ к камере
-        navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
-            localStream = stream;
-            localVideo.srcObject = stream;
-        });
-
-        // 2. Показываем твой ID, когда он создастся
-        peer.on('open', id => {
-            myIdDisplay.innerText = id;
-        });
-
-        // 3. Отвечаем на звонок
+        // Слушаем входящие звонки
         peer.on('call', call => {
-            call.answer(localStream); // Отправляем свой поток
-            call.on('stream', userStream => {
-                remoteVideo.srcObject = userStream; // Получаем поток друга
+            call.answer(myStream);
+            call.on('stream', remoteStream => {
+                remoteVideo.srcObject = remoteStream;
+                status.innerText = "В сети!";
             });
         });
 
-        // 4. Функция самого звонка
-        function makeCall() {
-            const friendId = document.getElementById('peer-id').value;
-            const call = peer.call(friendId, localStream);
-            call.on('stream', userStream => {
-                remoteVideo.srcObject = userStream;
-            });
+        function startConnect() {
+            // Чтобы не мучиться с ID, просто введи ID друга вручную или договоритесь, 
+            // что один всегда звонит другому по конкретному имени.
+            const friendId = prompt("Введи ID друга (он появится у него на экране после загрузки):");
+            if (friendId) {
+                const call = peer.call(friendId, myStream);
+                call.on('stream', remoteStream => {
+                    remoteVideo.srcObject = remoteStream;
+                    status.innerText = "Связь установлена!";
+                });
+            }
         }
+
+        peer.on('open', id => {
+            status.innerText = "Твой личный ID: " + id + " (передай его другу)";
+        });
     </script>
 </body>
 </html>
