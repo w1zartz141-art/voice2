@@ -21,23 +21,33 @@
     <!-- Контейнер для видео -->
     <div id="meet"></div>
 
-    <script src="https://8x8.vc"></script>
-    <script>
-        function startCall() {
-            // Скрываем кнопку, показываем окно звонка
-            document.getElementById('setup').style.display = 'none';
-            document.getElementById('meet').style.display = 'block';
+    <script src="https://meet.jit.si/external_api.js"></script>
 
-            const domain = '8x8.vc';
-            const options = {
-                roomName: 'VashUniqueRoomName123', // Придумай свое уникальное имя комнаты
-                width: '100%',
-                height: '100%',
-                parentNode: document.querySelector('#meet'),
-                lang: 'ru'
-            };
-            const api = new JitsiMeetExternalAPI(domain, options);
-        }
-    </script>
+<script>
+    function startCall() {
+        document.getElementById('setup').style.display = 'none';
+        document.getElementById('meet').style.display = 'block';
+
+        const domain = 'meet.jit.si'; // Используем основной бесплатный сервер
+        const options = {
+            roomName: 'MyPersonalSuperRoom_9988', // Сделай очень уникальным!
+            width: '100%',
+            height: '100%',
+            parentNode: document.querySelector('#meet'),
+            lang: 'ru',
+            interfaceConfigOverwrite: {
+                // Это поможет, если кнопки не прогружаются
+                SHOW_JITSI_WATERMARK: false 
+            },
+            configOverwrite: {
+                // Принудительно включаем звук и видео при входе
+                startWithAudioMuted: false,
+                startWithVideoMuted: false
+            }
+        };
+        const api = new JitsiMeetExternalAPI(domain, options);
+    }
+</script>
 </body>
 </html>
+
