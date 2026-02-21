@@ -3,185 +3,98 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Voice Room</title>
-<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-
+<title>Voice Chat</title>
 <style>
 body{
     margin:0;
-    font-family:Arial, sans-serif;
-    background:linear-gradient(135deg,#1e1e2f,#121212);
+    background:#111;
     color:white;
+    font-family:Arial;
     display:flex;
     justify-content:center;
     align-items:center;
     height:100vh;
 }
-
-.container{
+.box{
     text-align:center;
     background:#1c1c1c;
     padding:40px;
     border-radius:20px;
     width:90%;
     max-width:400px;
-    box-shadow:0 0 30px rgba(0,0,0,0.5);
 }
-
-h2{
-    margin-bottom:25px;
-}
-
 button{
     width:100%;
     padding:15px;
+    margin-top:15px;
     font-size:18px;
     border:none;
     border-radius:30px;
-    margin-top:15px;
     cursor:pointer;
-    transition:0.2s;
 }
-
-#joinBtn{
-    background:#4caf50;
-    color:white;
-}
-
-#joinBtn:hover{
-    background:#43a047;
-}
-
-#micBtn{
-    background:#2196f3;
-    color:white;
-    display:none;
-}
-
-#micBtn.active{
-    background:#e53935;
-}
-
-#leaveBtn{
-    background:#555;
-    color:white;
-    display:none;
-}
-
-.status{
-    margin-top:20px;
-    font-size:14px;
-    color:#bbb;
-}
+.join{background:#4caf50;color:white;}
+.mic{background:#2196f3;color:white;display:none;}
+.mic.off{background:#e53935;}
+.status{margin-top:20px;color:#bbb;}
 </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>🎙 Общая голосовая комната</h2>
-
-    <button id="joinBtn">Войти в комнату</button>
-    <button id="micBtn">🎤 Микрофон ВКЛ</button>
-    <button id="leaveBtn">Выйти</button>
-
-    <div class="status" id="status">Не подключено</div>
+<div class="box">
+<h2>🎙 Голосовая комната</h2>
+<button class="join" id="join">Войти</button>
+<button class="mic" id="mic">🎤 Микрофон ВКЛ</button>
+<div class="status" id="status">Не подключено</div>
 </div>
 
 <script>
-let peer;
 let localStream;
 let micEnabled = true;
-let connections = [];
-const ROOM_ID = "global-voice-room-777";
+let audioContext;
+let gainNode;
 
-const joinBtn = document.getElementById("joinBtn");
-const micBtn = document.getElementById("micBtn");
-const leaveBtn = document.getElementById("leaveBtn");
+const joinBtn = document.getElementById("join");
+const micBtn = document.getElementById("mic");
 const statusText = document.getElementById("status");
 
 joinBtn.onclick = async () => {
 
-    if(location.protocol !== "https:"){
-        alert("Сайт должен работать через HTTPS!");
-        return;
-    }
+if(location.protocol !== "https:"){
+    alert("Нужен HTTPS!");
+    return;
+}
 
-    try{
-        statusText.innerText = "Запрос микрофона...";
-        localStream = await navigator.mediaDevices.getUserMedia({audio:true});
-    }catch(e){
-        statusText.innerText = "Нет доступа к микрофону!";
-        return;
-    }
+try{
+    statusText.innerText = "Запрос микрофона...";
+    localStream = await navigator.mediaDevices.getUserMedia({audio:true});
+}catch(e){
+    statusText.innerText = "Нет доступа к микрофону!";
+    return;
+}
 
-    joinBtn.style.display = "none";
-    micBtn.style.display = "block";
-    leaveBtn.style.display = "block";
+audioContext = new AudioContext();
+const source = audioContext.createMediaStreamSource(localStream);
+gainNode = audioContext.createGain();
+source.connect(gainNode);
+gainNode.connect(audioContext.destination);
 
-    peer = new Peer();
+joinBtn.style.display="none";
+micBtn.style.display="block";
+statusText.innerText="Микрофон активен. Говори — ты должен слышать себя.";
 
-    peer.on("open", id=>{
-        statusText.innerText = "Вы в комнате";
-        connectToRoom();
-    });
-
-    peer.on("call", call=>{
-        call.answer(localStream);
-        call.on("stream", stream=>{
-            playAudio(stream);
-        });
-        connections.push(call);
-    });
 };
-
-function connectToRoom(){
-    const roomPeer = new Peer(ROOM_ID);
-
-    roomPeer.on("error", ()=>{
-        const call = peer.call(ROOM_ID, localStream);
-        call.on("stream", stream=>{
-            playAudio(stream);
-        });
-        connections.push(call);
-    });
-
-    roomPeer.on("call", call=>{
-        call.answer(localStream);
-        call.on("stream", stream=>{
-            playAudio(stream);
-        });
-        connections.push(call);
-    });
-}
-
-function playAudio(stream){
-    const audio = new Audio();
-    audio.srcObject = stream;
-    audio.play();
-}
 
 micBtn.onclick = ()=>{
-    micEnabled = !micEnabled;
-    localStream.getAudioTracks()[0].enabled = micEnabled;
+micEnabled = !micEnabled;
+localStream.getAudioTracks()[0].enabled = micEnabled;
 
-    if(micEnabled){
-        micBtn.innerText = "🎤 Микрофон ВКЛ";
-        micBtn.classList.remove("active");
-    }else{
-        micBtn.innerText = "🔇 Микрофон ВЫКЛ";
-        micBtn.classList.add("active");
-    }
-};
-
-leaveBtn.onclick = ()=>{
-    connections.forEach(c=>c.close());
-    peer.destroy();
-    localStream.getTracks().forEach(t=>t.stop());
-
-    micBtn.style.display="none";
-    leaveBtn.style.display="none";
-    joinBtn.style.display="block";
-    statusText.innerText="Вы вышли из комнаты";
+if(micEnabled){
+    micBtn.innerText="🎤 Микрофон ВКЛ";
+    micBtn.classList.remove("off");
+}else{
+    micBtn.innerText="🔇 Микрофон ВЫКЛ";
+    micBtn.classList.add("off");
+}
 };
 </script>
 
