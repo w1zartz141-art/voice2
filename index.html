@@ -1,63 +1,78 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <title>Pixel World Online - Fixed</title>
-    <!-- Добавляем проверку загрузки скрипта -->
+    <meta charset="UTF-8">
+    <title>Pixel Online World</title>
+    <!-- Подключаем библиотеку ПЕРЕД основным кодом -->
     <script src="https://cdn.ably.com"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #0a0a0a; font-family: 'Segoe UI', sans-serif; }
+        body { margin: 0; overflow: hidden; background: #050505; font-family: 'Segoe UI', sans-serif; }
         canvas { display: block; }
-        #ui { position: absolute; top: 20px; left: 20px; color: #00ff88; background: rgba(0,0,0,0.85); padding: 15px; border-radius: 10px; border: 1px solid #00ff88; pointer-events: none; }
+        #ui { 
+            position: absolute; top: 20px; left: 20px; color: #00ff88; 
+            background: rgba(0,0,0,0.85); padding: 15px; border-radius: 10px; 
+            border: 1px solid #00ff88; pointer-events: none; z-index: 100;
+        }
         .stats { font-size: 14px; margin-top: 5px; color: #fff; }
     </style>
 </head>
 <body>
     <div id="ui">
-        <div id="my-nick" style="font-weight: bold; font-size: 18px;">Инициализация...</div>
-        <div class="stats" id="status">Статус: Ожидание сети</div>
+        <div id="my-nick" style="font-weight: bold; font-size: 18px;">Загрузка...</div>
+        <div class="stats" id="status">Статус: Поиск библиотеки...</div>
         <div class="stats" id="player-count">Игроков: 1</div>
     </div>
     <canvas id="game"></canvas>
 
 <script>
-    // Твой рабочий ключ
+    // ТВОЙ ПРОВЕРЕННЫЙ КЛЮЧ
     const API_KEY = 'Sbw0Fg.34o05Q:z4epDMZAArkhjqou86RiTKr_L7NuWUZ5i8KTBArdXZs';
     
     let ably, channel;
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
 
-    // Генерация персонажа
-    const adjs = ["Быстрый", "Яркий", "Ночной", "Крутой"];
-    const names = ["Пиксель", "Ниндзя", "Герой", "Игрок"];
     const myId = Math.random().toString(36).substring(7);
-    const myNick = adjs[Math.floor(Math.random()*adjs.length)] + " " + names[Math.floor(Math.random()*names.length)];
+    const nicks = ["Быстрый Пиксель", "Кибер Кот", "Ночной Герой", "Скрытный Бот", "Ловкий Ниндзя"];
+    const myNick = nicks[Math.floor(Math.random() * nicks.length)] + "#" + Math.floor(Math.random()*99);
     
     let me = {
         id: myId,
         nick: myNick,
         x: Math.random() * (window.innerWidth - 100) + 50,
         y: Math.random() * (window.innerHeight - 100) + 50,
-        color: `hsl(${Math.random() * 360}, 80%, 60%)`,
+        color: `hsl(${Math.random() * 360}, 85%, 60%)`,
         lastSeen: Date.now()
     };
 
     let players = {};
     players[myId] = me;
 
-    // Функция запуска игры после подключения к Ably
-    function initAbly() {
+    const keys = {};
+    window.onkeydown = (e) => keys[e.code] = true;
+    window.onkeyup = (e) => keys[e.code] = false;
+
+    // Главная функция инициализации
+    function startApp() {
+        if (typeof Ably === 'undefined') {
+            document.getElementById('status').innerText = "Ошибка: Библиотека блокируется (проверь AdBlock)";
+            console.log("Ждем загрузки Ably...");
+            setTimeout(startApp, 1000); // Пробуем снова через секунду
+            return;
+        }
+
+        document.getElementById('status').innerText = "Статус: Подключение...";
+        
         try {
             ably = new Ably.Realtime({ key: API_KEY });
-            
+
             ably.connection.on('connected', () => {
+                document.getElementById('status').innerText = "Статус: В СЕТИ";
                 document.getElementById('my-nick').innerText = "Ты: " + myNick;
-                document.getElementById('status').innerText = "Статус: В сети";
-                console.log("Успешное подключение!");
                 
-                channel = ably.channels.get('global-room');
+                channel = ably.channels.get('pixel-room');
                 
-                // Подписка на других игроков
+                // Подписка на других
                 channel.subscribe('u', (msg) => {
                     if (msg.data.id !== myId) {
                         players[msg.data.id] = msg.data;
@@ -65,23 +80,18 @@
                     }
                 });
 
-                // Запуск игрового цикла только после коннекта
+                // Запуск рендера
                 requestAnimationFrame(gameLoop);
             });
 
             ably.connection.on('failed', (err) => {
-                document.getElementById('status').innerText = "Ошибка: Проверь ключ API";
-                console.error("Ably failed:", err);
+                document.getElementById('status').innerText = "Ошибка: " + err.reason.message;
             });
 
         } catch (e) {
-            console.error("Ошибка инициализации:", e);
+            console.error("Ошибка запуска:", e);
         }
     }
-
-    const keys = {};
-    window.onkeydown = (e) => keys[e.code] = true;
-    window.onkeyup = (e) => keys[e.code] = false;
 
     function update() {
         let moved = false;
@@ -96,13 +106,13 @@
             channel.publish('u', me);
         }
 
-        // Очистка тех, кто вышел (более 5 сек неактивности)
+        // Удаление неактивных через 5 сек
         for (let id in players) {
             if (id !== myId && Date.now() - players[id].lastSeen > 5000) {
                 delete players[id];
             }
         }
-        document.getElementById('player-count').innerText = "Игроков: " + Object.keys(players).length;
+        document.getElementById('player-count').innerText = "Игроков в сети: " + Object.keys(players).length;
     }
 
     function gameLoop() {
@@ -113,12 +123,14 @@
         update();
 
         Object.values(players).forEach(p => {
-            ctx.shadowBlur = 10;
+            // Эффект свечения
+            ctx.shadowBlur = 15;
             ctx.shadowColor = p.color;
             ctx.fillStyle = p.color;
             ctx.fillRect(p.x, p.y, 25, 25);
             ctx.shadowBlur = 0;
 
+            // Ник
             ctx.fillStyle = "white";
             ctx.font = "bold 13px Arial";
             ctx.textAlign = "center";
@@ -128,8 +140,8 @@
         requestAnimationFrame(gameLoop);
     }
 
-    // Запускаем всё
-    window.onload = initAbly;
+    // Запуск после загрузки страницы
+    window.onload = startApp;
 </script>
 </body>
 </html>
